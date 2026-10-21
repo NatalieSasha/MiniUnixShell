@@ -1,0 +1,277 @@
+minishell experiment log
+generated : 2026-10-21T18:04:51Z (UTC)
+kernel    : Linux 5bbcd21bb826 6.6.87.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun  5 18:30:46 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+compiler  : gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+shell     : minishell 1.0.0
+
+==============================================================
+Experiment A: process creation
+==============================================================
+date      : 2026-10-21T18:04:51Z (UTC)
+kernel    : Linux 6.6.87.2-microsoft-standard-WSL2
+uname -a  : Linux 5bbcd21bb826 6.6.87.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun  5 18:30:46 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+compiler  : gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+shell     : /work/minishell (minishell 1.0.0)
+
+--- 1. The traced command ------------------------------------------
+The shell is given the single command '/bin/echo hello' on stdin.
+
+$ strace -f -e trace=process -o trace.txt /work/minishell < input
+
+--- 2. The extracted trace -----------------------------------------
+
+execve("/work/minishell", ["/work/minishell"], 0x7fffc9611168 /* 8 vars */) = 0
+wait4(-1, 0x7ffef61e9914, WNOHANG, NULL) = -1 ECHILD (No child processes)
+clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7ef87f1e9a10) = 74
+wait4(74,  <unfinished ...>
+execve("/bin/echo", ["/bin/echo", "hello"], 0x7ffef61e9b38 /* 8 vars */) = 0
+exit_group(0)                     = ?
+<... wait4 resumed>[{WIFEXITED(s) && WEXITSTATUS(s) == 0}], 0, NULL) = 74
+wait4(-1, 0x7ffef61e9914, WNOHANG, NULL) = -1 ECHILD (No child processes)
+wait4(-1, 0x7ffef61e9914, WNOHANG, NULL) = -1 ECHILD (No child processes)
+exit_group(0)                     = ?
+
+--- 3. The full trace ----------------------------------------------
+
+73    execve("/work/minishell", ["/work/minishell"], 0x7fffc9611168 /* 8 vars */) = 0
+73    wait4(-1, 0x7ffef61e9914, WNOHANG, NULL) = -1 ECHILD (No child processes)
+73    clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7ef87f1e9a10) = 74
+73    wait4(74,  <unfinished ...>
+74    execve("/bin/echo", ["/bin/echo", "hello"], 0x7ffef61e9b38 /* 8 vars */) = 0
+74    exit_group(0)                     = ?
+74    +++ exited with 0 +++
+73    <... wait4 resumed>[{WIFEXITED(s) && WEXITSTATUS(s) == 0}], 0, NULL) = 74
+73    --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=74, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+73    wait4(-1, 0x7ffef61e9914, WNOHANG, NULL) = -1 ECHILD (No child processes)
+73    wait4(-1, 0x7ffef61e9914, WNOHANG, NULL) = -1 ECHILD (No child processes)
+73    exit_group(0)                     = ?
+73    +++ exited with 0 +++
+
+--- 4. Interpretation ---------------------------------------------
+The trace shows the following sequence:
+  * the shell process (pid of the traced program) starts and reads
+    the command line;
+  * a clone(2) (the Linux implementation of fork(2)) creates a child;
+  * the child calls execve(2) to replace its program image with
+    /bin/echo;
+  * the child terminates with exit_group(2);
+  * the parent calls wait4(2) (the Linux implementation of
+    waitpid(2)) and collects the exit status.
+
+Note: the exact sequence of library calls is implementation
+dependent.  glibc implements fork(2) with clone(2) and waitpid(2)
+with wait4(2); the POSIX names fork(2) and waitpid(2) are the
+portable interface that the source code in src/process.c and
+src/pipeline.c uses.
+==============================================================
+Experiments B and C: foreground and background execution
+==============================================================
+date      : 2026-10-21T18:04:52Z (UTC)
+kernel    : Linux 6.6.87.2-microsoft-standard-WSL2
+compiler  : gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+
+--- Experiment B: foreground 'sleep 3' --------------------
+run 1 of 3: 3 second(s) elapsed
+run 2 of 3: 3 second(s) elapsed
+run 3 of 3: 3 second(s) elapsed
+
+--- Experiment C: background 'sleep 3 &' -----------------
+run 1 of 3: 0 second(s) elapsed
+run 2 of 3: 0 second(s) elapsed
+run 3 of 3: 0 second(s) elapsed
+
+--- Process table during a background job ---------------------------
+The shell prints the job number and the process id of the job:
+    [1] 133
+
+Interpretation:
+  * The foreground run blocks for the whole duration of 'sleep'.
+    The shell called fork(2), then waitpid(2); waitpid(2) does not
+    return until the child has terminated, so the shell cannot read
+    the next command line before that.
+  * The background run returns immediately.  The shell called
+    fork(2) but did not call waitpid(2) for that child; it recorded
+    the process id in its job table and returned to the prompt.
+  * The child is not orphaned: it is still a child of the shell.
+    It becomes a zombie when it terminates and is reaped by the
+    waitpid(-1, WNOHANG) call in process_reap_children().
+==============================================================
+Experiment D: redirection and file descriptors
+==============================================================
+date      : 2026-10-21T18:05:03Z (UTC)
+kernel    : Linux 6.6.87.2-microsoft-standard-WSL2
+
+--- 1. The traced command ------------------------------------------
+The shell is given: 'cat < input.txt > output.txt'
+
+--- 2. The relevant calls -----------------------------------------
+
+close(3)                          = 0
+close(3)                          = 0
+openat(AT_FDCWD, "/tmp/tmp.Vn37XfZ4A1/input.txt", O_RDONLY) = 3
+dup2(3, 0)                        = 0
+close(3)                          = 0
+openat(AT_FDCWD, "/tmp/tmp.Vn37XfZ4A1/output.txt", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 3
+dup2(3, 1)                        = 1
+close(3)                          = 0
+close(3)                          = 0
+close(3)                          = 0
+close(0)                          = 0
+close(1)                          = 0
+close(2)                          = 0
+
+--- 3. The resulting file -----------------------------------------
+content of output.txt:
+    alpha
+    beta
+
+--- 4. Interpretation ---------------------------------------------
+  * The shell calls open(2) (glibc: openat(2) with AT_FDCWD) for the
+    redirection target.  The mode argument is 0666; the kernel masks
+    it with the current umask.
+  * dup2(2) installs the new descriptor on position 0 or 1.  dup2(2)
+    closes the target descriptor atomically, so there is no window in
+    which the descriptor is invalid.
+  * close(2) releases the temporary descriptor that open(2) returned.
+  * The library function open(2) and the system call openat(2) are
+    not the same thing: glibc implements open(2) as a wrapper around
+    the openat(2) system call, and that is why openat(2) appears in
+    the trace.
+==============================================================
+Experiment E: pipelines
+==============================================================
+date      : 2026-10-21T18:05:04Z (UTC)
+kernel    : Linux 6.6.87.2-microsoft-standard-WSL2
+
+--- 1. Pipeline versus manual chain --------------------------------
+Pipeline:
+    1
+Manual chain with an intermediate file:
+    1
+
+Both produce the same number of matching lines.
+
+--- 2. Kernel side of the pipe -------------------------------------
+Relevant calls of the shell and of the pipeline stages:
+pipe2([3, 4], 0)                  = 0
+pipe2([4, 5], 0)                  = 0
+dup2(4, 1)                        = 1
+dup2(3, 0)                        = 0
+dup2(5, 1)                        = 1
+dup2(4, 0)                        = 0
+
+The list above is filtered to pipe2(2) and dup2(2).  The complete
+trace additionally contains the openat(2), read(2), write(2) and
+close(2) calls of the three stages and of the shell itself.
+
+--- 3. Throughput of the pipe --------------------------------------
+    200000
+    elapsed: 112 ms for 200000 lines
+
+Interpretation:
+  * Each '|' makes the shell call pipe(2) (glibc uses pipe2(2) with
+    O_CLOEXEC).  The read end becomes the standard input of the
+    following stage, the write end becomes the standard output of the
+    preceding stage; both are installed with dup2(2).
+  * Every descriptor that is not needed by a stage is closed in that
+    stage.  If a stage kept the write end of a pipe open, the reader
+    would never see end-of-file and the pipeline would block
+    forever.
+  * All stages are forked before the shell waits for any of them, so
+    the consumer starts running while the producer is still alive.
+==============================================================
+Experiment F: error handling
+==============================================================
+date      : 2026-10-21T18:05:04Z (UTC)
+kernel    : Linux 6.6.87.2-microsoft-standard-WSL2
+
+--- 1. Parse error -------------------------------------------------
+  unterminated quote
+    command : echo "unterminated
+    output  : minishell: unterminated quoted string
+    status  : 0
+
+  unsupported syntax
+    command : echo $HOME
+    output  : minishell: unsupported shell syntax (no variable expansion, command substitution, globbing, here-documents or command separators)
+    status  : 0
+
+  redirection without a target
+    command : echo >
+    output  : minishell: redirection operator is missing a file name
+    status  : 0
+
+--- 2. Failed system call ------------------------------------------
+  input file does not exist
+    command : cat < /tmp/tmp.RjVZWByPFa/does_not_exist
+    output  : minishell: /tmp/tmp.RjVZWByPFa/does_not_exist: No such file or directory
+    status  : 1
+
+  output directory does not exist
+    command : echo x > /tmp/tmp.RjVZWByPFa/no_such_dir/x
+    output  : minishell: /tmp/tmp.RjVZWByPFa/no_such_dir/x: No such file or directory
+    status  : 1
+
+--- 3. Failed program launch ---------------------------------------
+  command not found
+    command : no_such_command_42
+    output  : minishell: no_such_command_42: No such file or directory
+    status  : 127
+
+  command is not executable
+    command : /tmp/tmp.RjVZWByPFa/not_executable
+    output  : minishell: /tmp/tmp.RjVZWByPFa/not_executable: Permission denied
+    status  : 126
+
+--- 4. Non-zero exit status of a program that ran -------------------
+  program exits with 3
+    command : /bin/sh -c 'exit 3'
+    output  : <none>
+    status  : 3
+
+  program was killed by SIGKILL
+    command : /bin/sh -c 'kill -9 $$'
+    output  : <none>
+    status  : 137
+
+--- 5. The shell survives every one of them -------------------------
+  output:
+    minishell: unterminated quoted string
+    minishell: no_such_command_42: No such file or directory
+    minishell: /nope: No such file or directory
+    still-here
+  result: the shell is still alive and executed the
+          last command successfully.
+==============================================================
+Experiment G: resource management
+==============================================================
+date      : 2026-10-21T18:05:04Z (UTC)
+kernel    : Linux 6.6.87.2-microsoft-standard-WSL2
+
+--- 1. Zombies after ten background jobs ----------------------------
+  process table of the children of the shell (pid 259):
+  result: no child process is left -> every child was reaped.
+
+--- 2. File descriptor hygiene -------------------------------------
+  open descriptors before the test: 3
+  open descriptors after 30 redirections: 3
+  result: no descriptor was leaked.
+  the descriptors that are currently open:
+    total 0
+    lr-x------ 1 root root 64 Oct 21 18:05 0 -> /tmp/tmp.ozkNsOShDk/ctl
+    l-wx------ 1 root root 64 Oct 21 18:05 1 -> /tmp/tmp.ozkNsOShDk/out.txt
+    l-wx------ 1 root root 64 Oct 21 18:05 2 -> /tmp/tmp.ozkNsOShDk/out.txt
+
+Interpretation:
+  * A child that terminates stays in the process table as a zombie
+    until its parent collects its exit status with waitpid(2).  The
+    shell collects it in process_reap_children(), which calls
+    waitpid(-1, WNOHANG) in a loop.
+  * The reaping is deliberately *not* done inside the SIGCHLD handler:
+    a signal handler may only use async-signal-safe functions, and
+    printf(3) is not one of them.  The handler only sets a flag and
+    the actual work happens in the normal control flow of the
+    interpreter loop.
+  * Every descriptor that the shell opens for a redirection is closed
+    again, and the pipe descriptors of a pipeline are closed in both
+    the parent and the child.

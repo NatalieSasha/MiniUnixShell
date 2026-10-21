@@ -1,0 +1,59 @@
+==============================================================
+Experiment A: process creation
+==============================================================
+date      : 2026-10-21T18:04:51Z (UTC)
+kernel    : Linux 6.6.87.2-microsoft-standard-WSL2
+uname -a  : Linux 5bbcd21bb826 6.6.87.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun  5 18:30:46 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+compiler  : gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+shell     : /work/minishell (minishell 1.0.0)
+
+--- 1. The traced command ------------------------------------------
+The shell is given the single command '/bin/echo hello' on stdin.
+
+$ strace -f -e trace=process -o trace.txt /work/minishell < input
+
+--- 2. The extracted trace -----------------------------------------
+
+execve("/work/minishell", ["/work/minishell"], 0x7fffc9611168 /* 8 vars */) = 0
+wait4(-1, 0x7ffef61e9914, WNOHANG, NULL) = -1 ECHILD (No child processes)
+clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7ef87f1e9a10) = 74
+wait4(74,  <unfinished ...>
+execve("/bin/echo", ["/bin/echo", "hello"], 0x7ffef61e9b38 /* 8 vars */) = 0
+exit_group(0)                     = ?
+<... wait4 resumed>[{WIFEXITED(s) && WEXITSTATUS(s) == 0}], 0, NULL) = 74
+wait4(-1, 0x7ffef61e9914, WNOHANG, NULL) = -1 ECHILD (No child processes)
+wait4(-1, 0x7ffef61e9914, WNOHANG, NULL) = -1 ECHILD (No child processes)
+exit_group(0)                     = ?
+
+--- 3. The full trace ----------------------------------------------
+
+73    execve("/work/minishell", ["/work/minishell"], 0x7fffc9611168 /* 8 vars */) = 0
+73    wait4(-1, 0x7ffef61e9914, WNOHANG, NULL) = -1 ECHILD (No child processes)
+73    clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7ef87f1e9a10) = 74
+73    wait4(74,  <unfinished ...>
+74    execve("/bin/echo", ["/bin/echo", "hello"], 0x7ffef61e9b38 /* 8 vars */) = 0
+74    exit_group(0)                     = ?
+74    +++ exited with 0 +++
+73    <... wait4 resumed>[{WIFEXITED(s) && WEXITSTATUS(s) == 0}], 0, NULL) = 74
+73    --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=74, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+73    wait4(-1, 0x7ffef61e9914, WNOHANG, NULL) = -1 ECHILD (No child processes)
+73    wait4(-1, 0x7ffef61e9914, WNOHANG, NULL) = -1 ECHILD (No child processes)
+73    exit_group(0)                     = ?
+73    +++ exited with 0 +++
+
+--- 4. Interpretation ---------------------------------------------
+The trace shows the following sequence:
+  * the shell process (pid of the traced program) starts and reads
+    the command line;
+  * a clone(2) (the Linux implementation of fork(2)) creates a child;
+  * the child calls execve(2) to replace its program image with
+    /bin/echo;
+  * the child terminates with exit_group(2);
+  * the parent calls wait4(2) (the Linux implementation of
+    waitpid(2)) and collects the exit status.
+
+Note: the exact sequence of library calls is implementation
+dependent.  glibc implements fork(2) with clone(2) and waitpid(2)
+with wait4(2); the POSIX names fork(2) and waitpid(2) are the
+portable interface that the source code in src/process.c and
+src/pipeline.c uses.

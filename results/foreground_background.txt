@@ -1,0 +1,32 @@
+==============================================================
+Experiments B and C: foreground and background execution
+==============================================================
+date      : 2026-10-21T18:04:52Z (UTC)
+kernel    : Linux 6.6.87.2-microsoft-standard-WSL2
+compiler  : gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+
+--- Experiment B: foreground 'sleep 3' --------------------
+run 1 of 3: 3 second(s) elapsed
+run 2 of 3: 3 second(s) elapsed
+run 3 of 3: 3 second(s) elapsed
+
+--- Experiment C: background 'sleep 3 &' -----------------
+run 1 of 3: 0 second(s) elapsed
+run 2 of 3: 0 second(s) elapsed
+run 3 of 3: 0 second(s) elapsed
+
+--- Process table during a background job ---------------------------
+The shell prints the job number and the process id of the job:
+    [1] 133
+
+Interpretation:
+  * The foreground run blocks for the whole duration of 'sleep'.
+    The shell called fork(2), then waitpid(2); waitpid(2) does not
+    return until the child has terminated, so the shell cannot read
+    the next command line before that.
+  * The background run returns immediately.  The shell called
+    fork(2) but did not call waitpid(2) for that child; it recorded
+    the process id in its job table and returned to the prompt.
+  * The child is not orphaned: it is still a child of the shell.
+    It becomes a zombie when it terminates and is reaped by the
+    waitpid(-1, WNOHANG) call in process_reap_children().

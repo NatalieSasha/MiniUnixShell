@@ -1,0 +1,33 @@
+==============================================================
+Experiment G: resource management
+==============================================================
+date      : 2026-10-21T18:05:04Z (UTC)
+kernel    : Linux 6.6.87.2-microsoft-standard-WSL2
+
+--- 1. Zombies after ten background jobs ----------------------------
+  process table of the children of the shell (pid 259):
+  result: no child process is left -> every child was reaped.
+
+--- 2. File descriptor hygiene -------------------------------------
+  open descriptors before the test: 3
+  open descriptors after 30 redirections: 3
+  result: no descriptor was leaked.
+  the descriptors that are currently open:
+    total 0
+    lr-x------ 1 root root 64 Oct 21 18:05 0 -> /tmp/tmp.ozkNsOShDk/ctl
+    l-wx------ 1 root root 64 Oct 21 18:05 1 -> /tmp/tmp.ozkNsOShDk/out.txt
+    l-wx------ 1 root root 64 Oct 21 18:05 2 -> /tmp/tmp.ozkNsOShDk/out.txt
+
+Interpretation:
+  * A child that terminates stays in the process table as a zombie
+    until its parent collects its exit status with waitpid(2).  The
+    shell collects it in process_reap_children(), which calls
+    waitpid(-1, WNOHANG) in a loop.
+  * The reaping is deliberately *not* done inside the SIGCHLD handler:
+    a signal handler may only use async-signal-safe functions, and
+    printf(3) is not one of them.  The handler only sets a flag and
+    the actual work happens in the normal control flow of the
+    interpreter loop.
+  * Every descriptor that the shell opens for a redirection is closed
+    again, and the pipe descriptors of a pipeline are closed in both
+    the parent and the child.

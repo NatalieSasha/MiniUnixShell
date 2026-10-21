@@ -1,0 +1,63 @@
+==============================================================
+Experiment F: error handling
+==============================================================
+date      : 2026-10-21T18:05:04Z (UTC)
+kernel    : Linux 6.6.87.2-microsoft-standard-WSL2
+
+--- 1. Parse error -------------------------------------------------
+  unterminated quote
+    command : echo "unterminated
+    output  : minishell: unterminated quoted string
+    status  : 0
+
+  unsupported syntax
+    command : echo $HOME
+    output  : minishell: unsupported shell syntax (no variable expansion, command substitution, globbing, here-documents or command separators)
+    status  : 0
+
+  redirection without a target
+    command : echo >
+    output  : minishell: redirection operator is missing a file name
+    status  : 0
+
+--- 2. Failed system call ------------------------------------------
+  input file does not exist
+    command : cat < /tmp/tmp.RjVZWByPFa/does_not_exist
+    output  : minishell: /tmp/tmp.RjVZWByPFa/does_not_exist: No such file or directory
+    status  : 1
+
+  output directory does not exist
+    command : echo x > /tmp/tmp.RjVZWByPFa/no_such_dir/x
+    output  : minishell: /tmp/tmp.RjVZWByPFa/no_such_dir/x: No such file or directory
+    status  : 1
+
+--- 3. Failed program launch ---------------------------------------
+  command not found
+    command : no_such_command_42
+    output  : minishell: no_such_command_42: No such file or directory
+    status  : 127
+
+  command is not executable
+    command : /tmp/tmp.RjVZWByPFa/not_executable
+    output  : minishell: /tmp/tmp.RjVZWByPFa/not_executable: Permission denied
+    status  : 126
+
+--- 4. Non-zero exit status of a program that ran -------------------
+  program exits with 3
+    command : /bin/sh -c 'exit 3'
+    output  : <none>
+    status  : 3
+
+  program was killed by SIGKILL
+    command : /bin/sh -c 'kill -9 $$'
+    output  : <none>
+    status  : 137
+
+--- 5. The shell survives every one of them -------------------------
+  output:
+    minishell: unterminated quoted string
+    minishell: no_such_command_42: No such file or directory
+    minishell: /nope: No such file or directory
+    still-here
+  result: the shell is still alive and executed the
+          last command successfully.

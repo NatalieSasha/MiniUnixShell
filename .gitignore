@@ -1,0 +1,29 @@
+# Build artefacts
+build/
+*.o
+*.d
+*.a
+*.so
+minishell
+minishell.exe
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Object files and core dumps
+core
+core.*
+
+# Test and experiment leftovers
+/tmp/
+*.tmp
+*.log
+
+# The transcripts in results/ are deliberately tracked: they are the
+# evidence for the experiments described in docs/report.md.  Only the
+# temporary files of a test run are ignored.

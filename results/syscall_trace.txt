@@ -1,0 +1,42 @@
+==============================================================
+Experiment D: redirection and file descriptors
+==============================================================
+date      : 2026-10-21T18:05:03Z (UTC)
+kernel    : Linux 6.6.87.2-microsoft-standard-WSL2
+
+--- 1. The traced command ------------------------------------------
+The shell is given: 'cat < input.txt > output.txt'
+
+--- 2. The relevant calls -----------------------------------------
+
+close(3)                          = 0
+close(3)                          = 0
+openat(AT_FDCWD, "/tmp/tmp.Vn37XfZ4A1/input.txt", O_RDONLY) = 3
+dup2(3, 0)                        = 0
+close(3)                          = 0
+openat(AT_FDCWD, "/tmp/tmp.Vn37XfZ4A1/output.txt", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 3
+dup2(3, 1)                        = 1
+close(3)                          = 0
+close(3)                          = 0
+close(3)                          = 0
+close(0)                          = 0
+close(1)                          = 0
+close(2)                          = 0
+
+--- 3. The resulting file -----------------------------------------
+content of output.txt:
+    alpha
+    beta
+
+--- 4. Interpretation ---------------------------------------------
+  * The shell calls open(2) (glibc: openat(2) with AT_FDCWD) for the
+    redirection target.  The mode argument is 0666; the kernel masks
+    it with the current umask.
+  * dup2(2) installs the new descriptor on position 0 or 1.  dup2(2)
+    closes the target descriptor atomically, so there is no window in
+    which the descriptor is invalid.
+  * close(2) releases the temporary descriptor that open(2) returned.
+  * The library function open(2) and the system call openat(2) are
+    not the same thing: glibc implements open(2) as a wrapper around
+    the openat(2) system call, and that is why openat(2) appears in
+    the trace.

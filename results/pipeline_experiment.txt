@@ -1,0 +1,42 @@
+==============================================================
+Experiment E: pipelines
+==============================================================
+date      : 2026-10-21T18:05:04Z (UTC)
+kernel    : Linux 6.6.87.2-microsoft-standard-WSL2
+
+--- 1. Pipeline versus manual chain --------------------------------
+Pipeline:
+    1
+Manual chain with an intermediate file:
+    1
+
+Both produce the same number of matching lines.
+
+--- 2. Kernel side of the pipe -------------------------------------
+Relevant calls of the shell and of the pipeline stages:
+pipe2([3, 4], 0)                  = 0
+pipe2([4, 5], 0)                  = 0
+dup2(4, 1)                        = 1
+dup2(3, 0)                        = 0
+dup2(5, 1)                        = 1
+dup2(4, 0)                        = 0
+
+The list above is filtered to pipe2(2) and dup2(2).  The complete
+trace additionally contains the openat(2), read(2), write(2) and
+close(2) calls of the three stages and of the shell itself.
+
+--- 3. Throughput of the pipe --------------------------------------
+    200000
+    elapsed: 112 ms for 200000 lines
+
+Interpretation:
+  * Each '|' makes the shell call pipe(2) (glibc uses pipe2(2) with
+    O_CLOEXEC).  The read end becomes the standard input of the
+    following stage, the write end becomes the standard output of the
+    preceding stage; both are installed with dup2(2).
+  * Every descriptor that is not needed by a stage is closed in that
+    stage.  If a stage kept the write end of a pipe open, the reader
+    would never see end-of-file and the pipeline would block
+    forever.
+  * All stages are forked before the shell waits for any of them, so
+    the consumer starts running while the producer is still alive.
